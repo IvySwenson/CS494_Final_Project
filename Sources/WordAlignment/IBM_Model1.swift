@@ -1,13 +1,19 @@
 import Foundation
 
+/// IBM Model 1 word aligner using Expectation-Maximization (EM) algorithm.
+/// Learns translation probabilities t(f|e) from a parallel corpus.
 public struct IBM_Model1 {
 
+    /// Bidirectional vocabulary mapping between word strings and integer IDs.
+    /// Using integer IDs instead of strings speeds up table lookups during training.
     public struct Vocab {
         private(set) var toId: [String: Int] = [:]
         private(set) var toStr: [String] = []
 
         public init() {}
 
+        /// Add a word to the vocabulary and return its ID.
+        /// If the word already exists, return the existing ID.
         @discardableResult
         public mutating func id(_ s: String) -> Int {
             if let i = toId[s] { return i }
@@ -17,17 +23,30 @@ public struct IBM_Model1 {
             return i
         }
 
+        /// Look up a word's ID without adding it to the vocabulary.
         public func lookup(_ s: String) -> Int? { toId[s] }
         public func str(_ i: Int) -> String { toStr[i] }
         public var size: Int { toStr.count }
     }
 
-    private var eVocab = Vocab()
-    private var fVocab = Vocab()
+    private var eVocab = Vocab()   // English vocabulary
+    private var fVocab = Vocab()   // Foreign (Russian) vocabulary
+
+    /// tTable[eId][fId] = t(f|e) = P(foreign word f | english word e)
     private var tTable: [Int: [Int: Double]] = [:]
+
+    /// cooccur[eId] = set of foreign word IDs that co-occur with english word eId
+    /// Used to restrict which parameters exist, keeping the table sparse.
     private var cooccur: [Int: Set<Int>] = [:]
+
+    /// Smoothing floor to avoid exact zero probabilities
     private let floorProb: Double = 1e-12
 
+    /// Initialize and train IBM Model 1 on a parallel corpus.
+    /// - Parameters:
+    ///   - source: Foreign (Russian) corpus
+    ///   - target: English corpus
+    ///   - iterations: Maximum number of EM iterations
     public init(source: Corpus, target: Corpus, iterations: Int = 5) {
         buildCooccurrence(source: source, target: target)
         initializeUniform()
@@ -36,6 +55,7 @@ public struct IBM_Model1 {
         }
     }
 
+    /// Return the learned translation probability t(f|e).
     public func translationProb(e: String, f: String) -> Double {
         guard
             let eId = eVocab.lookup(e),
@@ -46,6 +66,10 @@ public struct IBM_Model1 {
         return p
     }
 
+    // MARK: - Training helpers
+
+    /// Scan the parallel corpus to build vocabularies and co-occurrence sets.
+    /// Co-occurrence sets define which t(f|e) parameters actually exist.
     private mutating func buildCooccurrence(source: Corpus, target: Corpus) {
         cooccur.removeAll(keepingCapacity: true)
         eVocab = Vocab()
@@ -60,6 +84,8 @@ public struct IBM_Model1 {
         }
     }
 
+    /// Initialize t(f|e) uniformly over all foreign words co-occurring with each english word.
+    /// Each english word distributes probability mass equally across its co-occurring foreign words.
     private mutating func initializeUniform() {
         tTable.removeAll(keepingCapacity: true)
         for (eId, fset) in cooccur {
@@ -71,10 +97,16 @@ public struct IBM_Model1 {
         }
     }
 
+    /// Run the EM algorithm to estimate translation probabilities.
+    /// E-step: compute expected alignment counts using current parameters.
+    /// M-step: re-estimate parameters from expected counts.
+    /// Stops early if perplexity improvement is below threshold.
     private mutating func trainEM(source: Corpus, target: Corpus, iterations: Int) {
         var prevPPL = Double.infinity
 
         for _ in 0..<iterations {
+
+            // E-step: accumulate fractional counts
             var count: [Int: [Int: Double]] = [:]
             var total: [Int: Double] = [:]
 
@@ -85,12 +117,14 @@ public struct IBM_Model1 {
                 for fTok in fSent {
                     guard let fId = fVocab.lookup(fTok) else { continue }
 
+                    // Compute normalization: sum of t(f|e) over all english words in sentence
                     var denom = 0.0
                     for eId in eIds {
                         denom += (tTable[eId]?[fId] ?? floorProb)
                     }
                     if denom <= 0 { continue }
 
+                    // Distribute fractional count proportionally
                     for eId in eIds {
                         let t = (tTable[eId]?[fId] ?? floorProb)
                         let frac = t / denom
@@ -101,6 +135,7 @@ public struct IBM_Model1 {
                 }
             }
 
+            // M-step: normalize counts to get new probabilities
             for (eId, fset) in cooccur {
                 let denom = total[eId] ?? 0.0
                 if denom <= 0 { continue }
@@ -113,6 +148,7 @@ public struct IBM_Model1 {
                 tTable[eId] = newRow
             }
 
+            // Check convergence: stop if relative improvement is tiny
             let ppl = computePerplexity(source: source, target: target)
             if prevPPL.isFinite {
                 let relImprove = (prevPPL - ppl) / max(prevPPL, 1e-12)
@@ -122,6 +158,8 @@ public struct IBM_Model1 {
         }
     }
 
+    /// Compute perplexity of the model on a parallel corpus.
+    /// Lower perplexity indicates a better model fit.
     public func computePerplexity(source: Corpus, target: Corpus) -> Double {
         var totalLogProb = 0.0
         var tokenCount = 0
@@ -137,6 +175,7 @@ public struct IBM_Model1 {
                 for eId in eIds {
                     sumT += (tTable[eId]?[fId] ?? floorProb)
                 }
+                // p(f | eSent) = (1/|eSent|) * sum_e t(f|e)
                 let p = max(sumT * invELen, floorProb)
                 totalLogProb += log(p)
                 tokenCount += 1
