@@ -9,6 +9,8 @@ Sources/WordAlignment/
 ├── IBM_Model1.swift    # IBM Model 1 with EM training
 ├── IBM_Model2.swift    # IBM Model 2 with distortion parameters
 └── Aligner.swift       # Viterbi alignment and symmetrization
+
+
 ## Data
 
 We use the **News Commentary v16** English–Russian parallel corpus obtained from [WMT22](https://www.statmt.org/wmt22/translation-task.html), consisting of 331,508 sentence pairs.
@@ -49,6 +51,7 @@ Pair: "since their articles appeared, the price of gold has moved up still furth
 →  "с тех пор как вышли их статьи, стоимость золота повысилась еще больше."
 Model 1 intersection: 0-1 1-5 3-9 7-8 11-10
 Model 2 intersection: 0-1 1-5 3-6 7-8 11-10 12-11
+
 ## How to Run
 
 ```bash
