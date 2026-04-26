@@ -4,11 +4,11 @@ A Swift implementation of IBM Model 1 and IBM Model 2 word alignment for English
 
 ## Project Structure
 Sources/WordAlignment/
-├── main.swift          # Entry point: training and evaluation pipeline
-├── Corpus.swift        # Corpus loading utilities
-├── IBM_Model1.swift    # IBM Model 1 with EM training
-├── IBM_Model2.swift    # IBM Model 2 with distortion parameters
-└── Aligner.swift       # Viterbi alignment and symmetrization
+    main.swift          # Entry point: training and evaluation pipeline
+    Corpus.swift        # Corpus loading utilities
+    IBM_Model1.swift    # IBM Model 1 with EM training
+    IBM_Model2.swift    # IBM Model 2 with distortion parameters
+    Aligner.swift       # Viterbi alignment and symmetrization
 
 
 ## Data
